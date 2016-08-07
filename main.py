@@ -1,9 +1,7 @@
 import asyncio
 import discord
-import random
-import json
+import io
 from discord.ext import commands
-from discord.ext.commands import *
 
 if not discord.opus.is_loaded():
     # the 'opus' library here is opus.dll on windows
@@ -12,24 +10,6 @@ if not discord.opus.is_loaded():
     # opus library is located in and with the proper filename.
     # note that on windows this DLL is automatically provided for you
     discord.opus.load_opus('opus')
-
-
-class YoloSwag(HelpFormatter):
-    def format(self):
-        self._paginator = Paginator()
-        self._paginator.add_line("play   │ Post YouTube url after !play to add it to the queue")
-        self._paginator.add_line("pause  │ Pauses current song")
-        self._paginator.add_line("resume │ Resumes current song")
-        self._paginator.add_line("skip   │ Skips current song")
-        self._paginator.add_line("stop   │ Stop playing music, clear the queue, and leave voice channel")
-        self._paginator.add_line("join   │ Makes bot join the voice channel you're in")
-        self._paginator.add_line("b      │ I love the olympics")
-        self._paginator.add_line("n      │ teehee xd ")
-        self._paginator.add_line("cop    │ Hunting time")
-        return self._paginator.pages
-
-ys = YoloSwag()
-
 
 class VoiceEntry:
     def __init__(self, message, player):
@@ -81,7 +61,28 @@ class VoiceState:
             self.current.player.start()
             await self.play_next_song.wait()
 
+class ChatLog:
+    """ChatLog: Flavor text"""
+    def __init__(self, bot):
+
+        @bot.event
+        async def on_message(message):
+            if message.content.startswith("!log"):
+                with open("data/log.txt", "r") as f:
+                    output = f.read()
+        
+            # Write to log file [Timestamp] [Name] [Messge]
+            with open("data/log.txt", "a") as f:
+                msg = "[" + str(message.timestamp)[0:19] + "] "
+                msg += "[" + message.author.name + "] "
+                msg += "[ID: " + message.author.id + "] "
+                msg += message.content
+                f.write(msg + "\n")
+
 class Music:
+    """Voice related commands.
+    Works in multiple servers at once.
+    """
     def __init__(self, bot):
         self.bot = bot
         self.voice_states = {}
@@ -109,11 +110,23 @@ class Music:
                 pass
 
     @commands.command(pass_context=True, no_pm=True)
-    async def join(self, ctx):
-        """Makes bot join the voice channel you're in"""
+    async def join(self, ctx, *, channel : discord.Channel):
+        """Joins a voice channel."""
+        try:
+            await self.create_voice_client(channel)
+        except discord.ClientException:
+            await self.bot.say('Already in a voice channel...')
+        except discord.InvalidArgument:
+            await self.bot.say('This is not a voice channel...')
+        else:
+            await self.bot.say('Ready to play audio in ' + channel.name)
+
+    @commands.command(pass_context=True, no_pm=True)
+    async def summon(self, ctx):
+        """Summons the bot to join your voice channel."""
         summoned_channel = ctx.message.author.voice_channel
         if summoned_channel is None:
-            await self.bot.say("You aren't in a voice channel.")
+            await self.bot.say('You are not in a voice channel.')
             return False
 
         state = self.get_voice_state(ctx.message.server)
@@ -126,7 +139,13 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def play(self, ctx, *, song : str):
-        """Post YouTube url after !play to add it to the queue"""
+        """Plays a song.
+        If there is a song currently in the queue, then it is
+        queued until the next song is done playing.
+        This command automatically searches as well from YouTube.
+        The list of supported sites can be found here:
+        https://rg3.github.io/youtube-dl/supportedsites.html
+        """
         state = self.get_voice_state(ctx.message.server)
         opts = {
             'default_search': 'auto',
@@ -134,7 +153,7 @@ class Music:
         }
 
         if state.voice is None:
-            success = await ctx.invoke(self.play)
+            success = await ctx.invoke(self.summon)
             if not success:
                 return
 
@@ -150,8 +169,18 @@ class Music:
             await state.songs.put(entry)
 
     @commands.command(pass_context=True, no_pm=True)
+    async def volume(self, ctx, value : int):
+        """Sets the volume of the currently playing song."""
+
+        state = self.get_voice_state(ctx.message.server)
+        if state.is_playing():
+            player = state.player
+            player.volume = value / 100
+            await self.bot.say('Set the volume to {:.0%}'.format(player.volume))
+
+    @commands.command(pass_context=True, no_pm=True)
     async def pause(self, ctx):
-        """Pauses current song"""
+        """Pauses the currently played song."""
         state = self.get_voice_state(ctx.message.server)
         if state.is_playing():
             player = state.player
@@ -159,7 +188,7 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def resume(self, ctx):
-        """Resumes current song"""
+        """Resumes the currently played song."""
         state = self.get_voice_state(ctx.message.server)
         if state.is_playing():
             player = state.player
@@ -167,7 +196,9 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def stop(self, ctx):
-        """Stop playing music, clear the queue, and leave voice channel"""
+        """Stops playing audio and leaves the voice channel.
+        This also clears the queue.
+        """
         server = ctx.message.server
         state = self.get_voice_state(server)
 
@@ -184,159 +215,46 @@ class Music:
 
     @commands.command(pass_context=True, no_pm=True)
     async def skip(self, ctx):
-        """Skips current song"""
+        """Vote to skip a song. The song requester can automatically skip.
+        3 skip votes are needed for the song to be skipped.
+        """
+
         state = self.get_voice_state(ctx.message.server)
         if not state.is_playing():
-            await self.bot.say("No music currently playing")
-            return
-        state.skip()
-
-class Misc:
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def b(self, ctx):
-        """I love the olympics"""
-        await self.bot.say(":flag_us::swimmer::skin-tone-1::flag_mx:")
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def blm(self, ctx):
-        """All lives matter"""
-        msg = ""
-        for x in range(0, 50):
-            index = random.randrange(0, len(arrayBLM))
-            msg += arrayBLM[index]
-        await client.send_message(message.channel, msg)
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def cop(self, ctx):
-        """Hunting time"""
-        await self.bot.say(":man::skin-tone-5::gun::cop::skin-tone-1:")
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def n(self, ctx):
-        """teehee xd"""
-        await self.bot.say("Niggers")
-
-class RPG:
-    def __init__(self, bot):
-        self.bot = bot
-        self.save_interval = 60
-        self.timer = 3
-        self.gold = 0
-        self.players = {}
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def quit(self, ctx):
-        self.save(ctx.message.server.id)
-        await bot.logout()
-
-    @commands.group(pass_context=True, no_pm=True)
-    async def roll(self, ctx):
-        try:
-            content = ctx.message.content
-            args = content.split(" ")
-            dice = args[1]
-            rolls, limit = map(int, dice.split("d"))
-        except Exception:
-            await bot.say("Error: Not in NdN")
+            await self.bot.say('Not playing any music right now...')
             return
 
-        result = 0
-        for r in range(rolls):
-            result += random.randint(1, limit)
-
-        msg = ctx.message.author.name + " rolled: " + dice + "\n"
-        msg += "Result: " + str(result)
-        await bot.say(msg)
-        await bot.delete_message(ctx.message)
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def id(self, ctx):
-        await self.bot.say("Your ID is: " + ctx.message.author.id)
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def change(self, ctx):
-        args = ctx.message.content.split(" ")
-        self.timer = int(args[1])
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def stats(self, ctx):
-        self.check_if_player_exists(ctx.message.author.id)
-        id = ctx.message.author.id
-        msg = "```" + str(ctx.message.author) + "\n"
-        msg += "Gold: " + str(self.players[id]["gold"]) + "```"
-        await self.bot.delete_message(ctx.message)
-        await self.bot.say(msg)
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def grab(self, ctx):
-        id = ctx.message.author.id
-        self.check_if_player_exists(id)
-
-        if self.gold > 0:
-            self.players[id]["gold"] += self.gold
-            self.gold = 0
+        voter = ctx.message.author
+        if voter == state.current.requester:
+            await self.bot.say('Requester requested skipping song...')
+            state.skip()
+        elif voter.id not in state.skip_votes:
+            state.skip_votes.add(voter.id)
+            total_votes = len(state.skip_votes)
+            if total_votes >= 3:
+                await self.bot.say('Skip vote passed, skipping song...')
+                state.skip()
+            else:
+                await self.bot.say('Skip vote added, currently at [{}/3]'.format(total_votes))
         else:
-            await self.bot.say("Nothing to grab")
+            await self.bot.say('You have already voted to skip this song.')
 
     @commands.command(pass_context=True, no_pm=True)
-    async def start(self, ctx):
-        self.load(ctx.message.server.id)
-        await self.bot.say("RPG Started")
-        await self.generate_loot()
-        await self.save_at_interval()
+    async def playing(self, ctx):
+        """Shows info about the currently played song."""
 
-    async def generate_loot(self):
-        # Loot Scale: Avg level of players, capped at # of players
-        # Example: 20, 1, 1            = 7 -> 3
-        # Example: 8, 7, 7, 6, 5, 5, 5 = 6
-        loot_scale = 0
+        state = self.get_voice_state(ctx.message.server)
+        if state.current is None:
+            await self.bot.say('Not playing anything.')
+        else:
+            skip_count = len(state.skip_votes)
+            await self.bot.say('Now playing {} [skips: {}/3]'.format(state.current, skip_count))
 
-        if self.gold == 0:
-            self.gold = random.randrange(1, 11)
-            await self.bot.say(str(self.gold) + " gold has been dropped")
-        await asyncio.sleep(self.timer)
-        await self.generate_loot()
-
-    async def save_at_interval(self):
-        await asyncio.sleep(self.save_interval)
-        self.save(ctx.message.server.id)
-        await self.save_at_interval()
-
-    def check_if_player_exists(self, id):
-        if id not in self.players:
-            self.create_account(id)
-
-    def create_account(self, id):
-        self.players[id] = {'gold': 0, 'items': []}
-        print(self.players)
-        print(self.players[id]["gold"])
-
-    def save(self, id):
-        with open(id + ".json", "w") as outfile:
-            json.dump(self.players, outfile)
-
-    def load(self, id):
-        try:
-            with open(id + ".json") as infile:
-                self.players = json.load(infile)
-        except Exception:
-            self.save(id)
-
-    @commands.command(pass_context=True, no_pm=True)
-    async def p(self, ctx):
-    
-        await self.bot.say("Prune test")
-
-bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"), formatter=ys, description="", pm_help="true")
-#bot.add_cog(Music(bot))
-#bot.add_cog(Misc(bot))
-bot.add_cog(RPG(bot))
+bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"), description="SAMPLE STARTING TEXT HERE")
+bot.add_cog(ChatLog(bot))
 
 @bot.event
 async def on_ready():
-    print('Logged in as:\n{0} (ID: {0.id})'.format(bot.user))
+    print("Logged in as:\n{0} (ID: {0.id})".format(bot.user))
 
-bot.run('MjA0MzM1Njk1MzcwNjQ5NjAw.Cm2zYA.NqkHRHfem_PXUZhcIi94ofdKCU0')
+bot.run("MjA0MzgzOTkyOTQ0Nzg3NDU2.Cok3Kw.rwgWkG9QAetK8-glOU7BdR5j7gA")
