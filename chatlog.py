@@ -1,5 +1,11 @@
+import os
+
 class ChatLog:
     def __init__(self, bot):
+
+        # Create data directory if it doesn't exist
+        if not os.path.isdir("data"):
+            os.makedirs("data")
 
         @bot.event
         async def on_message(message):

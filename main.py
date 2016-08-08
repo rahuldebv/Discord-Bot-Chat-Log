@@ -1,6 +1,6 @@
 import discord
-import io
 from discord.ext import commands
+import io
 from chatlog import ChatLog
 import configparser
 
