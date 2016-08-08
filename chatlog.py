@@ -1,7 +1,27 @@
+import configparser
+import pathlib
 import os
+import time
+import datetime
+
+
+def not_pm(message):
+    return type(message.channel).__name__ == "Channel"
+
+
+def get_filename(message):
+    year = datetime.date.today().year
+    week = time.strftime("%U")
+    id = message.server.id
+    return "data/%s-%s-%s.log" % (year, week, id)
+
 
 class ChatLog:
     def __init__(self, bot):
+        # Get and set role needed to use admin commands
+        config = configparser.ConfigParser()
+        config.read("config.ini")
+        role = config.get("chat_log", "role")
 
         # Create data directory if it doesn't exist
         if not os.path.isdir("data"):
@@ -9,14 +29,28 @@ class ChatLog:
 
         @bot.event
         async def on_message(message):
-            if message.content.startswith("!log"):
-                with open("data/log.txt", "r") as f:
-                    output = f.read()
+            # Admin command to get URL of current week's log file
+            if message.content.startswith("!log") and not_pm(message):
+                for r in message.author.roles:
+                    if r.name == role:
+                        file = get_filename(message)
+                        path = os.path.abspath(file)
+                        path = pathlib.Path(path).as_uri()
+                        await bot.send_message(message.author, path)
 
             # Write to log file [Timestamp] [Name] [Messge]
-            with open("data/log.txt", "a") as f:
-                msg = "[" + str(message.timestamp)[0:19] + "] "
-                msg += "[" + message.author.name + "] "
-                msg += "[ID: " + message.author.id + "] "
-                msg += message.content
-                f.write(msg + "\n")
+            if not_pm(message):
+                file = get_filename(message)
+                with open(file, "a") as f:
+                    # Trim the timestamp to only get [y-m-d h:m:s]
+                    msg = "[" + str(message.timestamp)[0:19] + "] "
+
+                    # Add author's name and padding (names are 32 chars max)
+                    msg += "[" + message.author.name + "] "
+                    for x in range(len(message.author.name), 32):
+                        msg += " "
+
+                    # Add author's ID and message content and write to file
+                    msg += "[ID: " + message.author.id + "] "
+                    msg += message.content
+                    f.write(msg + "\n")
