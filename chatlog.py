@@ -14,7 +14,8 @@ def get_filename(message):
     year = datetime.date.today().year
     week = time.strftime("%U")
     id = message.server.id
-    return "%s-%s-%s.log" % (year, week, id)
+    channel = message.channel.name
+    return "%s-%s-%s-%s.log" % (year, week, id, channel)
 
 
 class ChatLog:
