@@ -14,21 +14,21 @@ def get_path(message):
     id = message.server.id
     year = datetime.date.today().year
     week = time.strftime("%U")
-    week = "30"
-    year = "2015"
+    #week = "30"
+    #year = "2015"
     return "%s/%s/%s/" % (id, year, week)
 
 
 def get_filename(message):
     year = datetime.date.today().year
     week = time.strftime("%U")
-    week = "30"
-    year = "2015"
+    #week = "30"
+    #year = "2015"
     id = message.server.id
     channel = message.channel.name
 
     path = "%s/%s/%s/" % (id, year, week)
-    file_name = "%s-%s-%s-%s.log" % (year, week, id, channel)
+    file_name = "%s-%s-%s.log" % (year, week, channel)
 
     return path + file_name
 
@@ -57,10 +57,6 @@ class ChatLog:
         role = config.get("chat_log", "role")
         path = config.get("chat_log", "path")
         addr = config.get("chat_log", "addr")
-
-        # Create data directory if it doesn't exist
-        if not os.path.isdir(path):
-            os.makedirs(path)
 
         @bot.event
         async def on_message(message):
