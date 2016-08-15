@@ -14,16 +14,12 @@ def get_path(message):
     id = message.server.id
     year = datetime.date.today().year
     week = time.strftime("%U")
-    #week = "30"
-    #year = "2015"
     return "%s/%s/%s/" % (id, year, week)
 
 
 def get_filename(message):
     year = datetime.date.today().year
     week = time.strftime("%U")
-    #week = "30"
-    #year = "2015"
     id = message.server.id
     channel = message.channel.name
 
@@ -62,7 +58,8 @@ class ChatLog:
         async def on_message(message):
             # Admin command to get URL of current week's log file
             if message.content.startswith("!log") and not_pm(message):
-                await bot.send_message(message.author, addr)
+                thing = "{}/?server={}".format(addr, message.server.id)
+                await bot.send_message(message.author, thing)
 
             # Write to log file [Timestamp] [Name] [Messge]
             if not_pm(message):
