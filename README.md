@@ -7,4 +7,4 @@ This is intended for use with [Discord Bot Chat Log Web](https://github.com/Tund
 TBD
 
 ### Misc:
-After cloning, rename `default.config.ini` to `config.ini`. Then run the command `git update-index --assume-unchanged default.config.ini` so that you only have your one personal configuration file
+After cloning, rename `default.config.ini` to `config.ini`. Then run the command `git update-index --assume-unchanged default.config.ini` so that you only have your one personal configuration file.
